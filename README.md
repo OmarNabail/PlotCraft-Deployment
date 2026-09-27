@@ -12,6 +12,7 @@ short_description: Generate Python visualization code from natural language.
 # PlotCraft
 
 [![CI](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/ci.yml/badge.svg)](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/ci.yml)
+[![Deployment](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/sync-to-hub.yml/badge.svg?branch=main)](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/sync-to-hub.yml)
 
 PlotCraft is a fine-tuned Qwen2.5-3B assistant that converts natural-language
 requests into executable Python visualization code. This repository contains
@@ -20,14 +21,17 @@ and GitHub Actions deployment pipeline.
 
 **[Try the live ZeroGPU demo](https://huggingface.co/spaces/omargam220/PlotCraft)**
 
-Generated code is displayed for review and is not executed on the server.
+Generated code is displayed for review and can be rendered as a PNG inside an
+isolated browser worker. Generated code is never executed on the server.
 
 ## Use the live application
 
 1. Open the live demo.
 2. Describe the Python visualization you want.
-3. Select **Submit**.
-4. Review and copy the generated Python code.
+3. Select **Generate Python Code**.
+4. Review the generated Python code.
+5. Select **Render Preview** to display the chart in the browser.
+6. Copy the code if you want to use it in your own project.
 
 Example request:
 

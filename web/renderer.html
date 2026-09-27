@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; worker-src blob:; connect-src https://cdn.jsdelivr.net; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+  >
+  <title>PlotCraft preview</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: transparent;
+    }
+    .panel {
+      min-height: 500px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+    #status {
+      padding: 24px;
+      color: #4b5563;
+      text-align: center;
+    }
+    #preview {
+      display: none;
+      max-width: 100%;
+      max-height: 500px;
+      object-fit: contain;
+    }
+    .error {
+      color: #b91c1c !important;
+    }
+    @media (prefers-color-scheme: dark) {
+      .panel {
+        border-color: #4b5563;
+        background: #111827;
+      }
+      #status {
+        color: #d1d5db;
+      }
+      .error {
+        color: #fca5a5 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="panel" aria-live="polite">
+    <p id="status">Generate code, review it, then select Render Preview.</p>
+    <img id="preview" alt="Rendered Python visualization">
+  </main>
+
+  <script>
+    "use strict";
+
+    const PYODIDE_BASE =
+      "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
+    const MAX_CODE_LENGTH = 20000;
+    const MAX_IMAGE_LENGTH = 8 * 1024 * 1024;
+    const LOAD_TIMEOUT_MS = 45000;
+    const TIMEOUT_MS = 10000;
+
+    const statusElement = document.getElementById("status");
+    const previewElement = document.getElementById("preview");
+    let activeWorker = null;
+    let activeWorkerUrl = null;
+    let timeoutId = null;
+    let workerBooted = false;
+
+    const workerSource = `
+      self.postMessage({phase: "booted"});
+      const PYODIDE_BASE = "${PYODIDE_BASE}";
+      let runtimePromise = null;
+
+      function getRuntime() {
+        if (!runtimePromise) {
+          runtimePromise = import(PYODIDE_BASE + "pyodide.mjs").then(
+            async ({loadPyodide}) => {
+              const runtime = await loadPyodide({indexURL: PYODIDE_BASE});
+              await runtime.loadPackage(["matplotlib", "pandas"]);
+              return runtime;
+            }
+          );
+        }
+        return runtimePromise;
+      }
+
+      const renderProgram = String.raw\`
+import ast
+import base64
+import builtins
+import io
+
+ALLOWED_MODULES = {
+    "math",
+    "matplotlib",
+    "matplotlib.pyplot",
+    "numpy",
+    "pandas",
+}
+
+BLOCKED_NAMES = {
+    "__import__", "breakpoint", "compile", "delattr", "dir", "eval",
+    "exec", "getattr", "globals", "help", "input", "js", "locals",
+    "memoryview", "micropip", "open", "pyodide", "setattr", "super",
+    "type", "vars",
+}
+
+BLOCKED_NODES = (
+    ast.AsyncFunctionDef,
+    ast.Await,
+    ast.ClassDef,
+    ast.Delete,
+    ast.FunctionDef,
+    ast.Global,
+    ast.Lambda,
+    ast.Nonlocal,
+    ast.Raise,
+    ast.Try,
+    ast.While,
+    ast.With,
+    ast.Yield,
+    ast.YieldFrom,
+)
+
+SAFE_DIRECT_CALLS = {
+    "abs", "all", "any", "bool", "dict", "enumerate", "float", "int",
+    "len", "list", "max", "min", "print", "range", "reversed", "round",
+    "set", "sorted", "str", "sum", "tuple", "zip",
+}
+
+
+class PlotCodeValidator(ast.NodeVisitor):
+    def __init__(self):
+        self.node_count = 0
+
+    def generic_visit(self, node):
+        self.node_count += 1
+        if self.node_count > 2500:
+            raise ValueError("The generated program is too complex to preview.")
+        if isinstance(node, BLOCKED_NODES):
+            raise ValueError(
+                f"{type(node).__name__} is not permitted in the preview."
+            )
+        super().generic_visit(node)
+
+    def visit_Import(self, node):
+        for alias in node.names:
+            if alias.name not in ALLOWED_MODULES:
+                raise ValueError(f"Import '{alias.name}' is not permitted.")
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node):
+        if node.level or node.module not in ALLOWED_MODULES:
+            raise ValueError(f"Import from '{node.module}' is not permitted.")
+        self.generic_visit(node)
+
+    def visit_Name(self, node):
+        if node.id in BLOCKED_NAMES or node.id.startswith("_"):
+            raise ValueError(f"Name '{node.id}' is not permitted.")
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node):
+        if node.attr.startswith("_"):
+            raise ValueError("Private attributes are not permitted.")
+        self.generic_visit(node)
+
+    def visit_Call(self, node):
+        if isinstance(node.func, ast.Name):
+            if node.func.id not in SAFE_DIRECT_CALLS:
+                raise ValueError(
+                    f"Direct call '{node.func.id}' is not permitted."
+                )
+        elif not isinstance(node.func, ast.Attribute):
+            raise ValueError("This type of function call is not permitted.")
+        self.generic_visit(node)
+
+    def visit_Constant(self, node):
+        if isinstance(node.value, (int, float)) and abs(node.value) > 1_000_000:
+            raise ValueError("A numeric value is too large for the preview.")
+        if isinstance(node.value, (str, bytes)) and len(node.value) > 100_000:
+            raise ValueError("A text value is too large for the preview.")
+        self.generic_visit(node)
+
+
+tree = ast.parse(_plotcraft_user_code, mode="exec")
+PlotCodeValidator().visit(tree)
+
+import matplotlib
+matplotlib.use("agg")
+import matplotlib.pyplot as plt
+
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if level or name not in ALLOWED_MODULES:
+        raise ImportError(f"Import '{name}' is not permitted.")
+    return __import__(name, globals, locals, fromlist, level)
+
+
+safe_builtins = {
+    name: getattr(builtins, name)
+    for name in SAFE_DIRECT_CALLS
+}
+safe_builtins["__import__"] = _safe_import
+namespace = {"__builtins__": safe_builtins}
+exec(compile(tree, "<plotcraft-preview>", "exec"), namespace, namespace)
+
+figures = [plt.figure(number) for number in plt.get_fignums()]
+if not figures:
+    raise ValueError("The generated code did not create a Matplotlib figure.")
+
+buffer = io.BytesIO()
+figures[-1].savefig(buffer, format="png", dpi=120, bbox_inches="tight")
+plt.close("all")
+base64.b64encode(buffer.getvalue()).decode("ascii")
+      \`;
+
+      self.onmessage = async (event) => {
+        const code = event.data?.code;
+        if (typeof code !== "string") {
+          self.postMessage({error: "No Python code was provided."});
+          return;
+        }
+
+        try {
+          const runtime = await getRuntime();
+          runtime.globals.set("_plotcraft_user_code", code);
+          self.postMessage({phase: "executing"});
+          const image = await runtime.runPythonAsync(renderProgram);
+          runtime.globals.delete("_plotcraft_user_code");
+          self.postMessage({image});
+        } catch (error) {
+          self.postMessage({
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      };
+    `;
+
+    function setStatus(message, isError = false) {
+      statusElement.textContent = message;
+      statusElement.classList.toggle("error", isError);
+      statusElement.style.display = "block";
+      previewElement.style.display = "none";
+      previewElement.removeAttribute("src");
+    }
+
+    function destroyWorker() {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (activeWorker !== null) {
+        activeWorker.terminate();
+        activeWorker = null;
+      }
+      if (activeWorkerUrl !== null) {
+        URL.revokeObjectURL(activeWorkerUrl);
+        activeWorkerUrl = null;
+      }
+    }
+
+    function render(code) {
+      destroyWorker();
+      workerBooted = false;
+
+      if (typeof code !== "string" || !code.trim()) {
+        setStatus("Generate Python code before rendering a preview.", true);
+        return;
+      }
+      if (code.length > MAX_CODE_LENGTH) {
+        setStatus("The generated code is too long to preview safely.", true);
+        return;
+      }
+
+      setStatus("Loading the secure browser renderer...");
+      activeWorkerUrl = URL.createObjectURL(
+        new Blob([workerSource], {type: "text/javascript"})
+      );
+      activeWorker = new Worker(activeWorkerUrl);
+
+      activeWorker.onmessage = (event) => {
+        const {image, error, phase} = event.data || {};
+        if (phase === "booted") {
+          workerBooted = true;
+          return;
+        }
+        if (phase === "executing") {
+          clearTimeout(timeoutId);
+          statusElement.textContent = "Rendering the visualization...";
+          timeoutId = setTimeout(() => {
+            setStatus(
+              "Rendering stopped after the 10-second safety limit.",
+              true
+            );
+            destroyWorker();
+          }, TIMEOUT_MS);
+          return;
+        }
+        if (error) {
+          setStatus(`Preview blocked or failed: ${error}`, true);
+          destroyWorker();
+          return;
+        }
+        if (typeof image !== "string" || image.length > MAX_IMAGE_LENGTH) {
+          setStatus("The renderer returned an invalid or oversized image.", true);
+          destroyWorker();
+          return;
+        }
+
+        previewElement.src = `data:image/png;base64,${image}`;
+        previewElement.style.display = "block";
+        statusElement.style.display = "none";
+        destroyWorker();
+      };
+
+      activeWorker.onerror = (event) => {
+        const detail = event.message ? `: ${event.message}` : ".";
+        const stage = workerBooted ? "load Pyodide" : "start";
+        setStatus(`The browser renderer could not ${stage}${detail}`, true);
+        destroyWorker();
+      };
+
+      timeoutId = setTimeout(() => {
+        setStatus("The browser renderer took too long to load.", true);
+        destroyWorker();
+      }, LOAD_TIMEOUT_MS);
+
+      activeWorker.postMessage({code});
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent) {
+        return;
+      }
+      if (event.data?.type === "plotcraft:render") {
+        render(event.data.code);
+      }
+    });
+
+    window.addEventListener("beforeunload", destroyWorker);
+  </script>
+</body>
+</html>

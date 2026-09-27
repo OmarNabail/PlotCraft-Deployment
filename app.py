@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import gradio as gr
 
@@ -23,16 +24,34 @@ EXAMPLE_PROMPTS = [
     ],
 ]
 
+RENDER_PREVIEW_JS = """
+(code) => {
+    const iframe = document.querySelector("#plotcraft-renderer iframe");
+    if (!iframe || !iframe.contentWindow) {
+        return [];
+    }
+
+    iframe.contentWindow.postMessage(
+        {type: "plotcraft:render", code: code || ""},
+        "*"
+    );
+    return [];
+}
+"""
+
+
 def handle_generation(prompt: str) -> tuple[str, str]:
     """Generate code and return a clear user-facing status message."""
     try:
         generated_code = generate_plot_code(prompt)
-        return generated_code, "✅ Generation complete — review and copy the code."
+        return generated_code, (
+            "Generation complete - review the code, then render it."
+        )
     except ValueError as error:
-        return "", f"⚠️ {error}"
+        return "", str(error)
     except Exception:
         logging.exception("Plot generation failed")
-        return "", "❌ Plot generation failed. Please try again."
+        return "", "Plot generation failed. Please try again."
 
 
 with gr.Blocks(title="PlotCraft") as demo:
@@ -45,7 +64,8 @@ with gr.Blocks(title="PlotCraft") as demo:
         **How to try it:**
         1. Select an example below or describe your own visualization.
         2. Click **Generate Python Code**.
-        3. Wait for the model, then review and copy the generated code.
+        3. Wait for the model and review the generated code.
+        4. Click **Render Preview** to display the chart in your browser.
 
         > **Free ZeroGPU demo:** The first request after inactivity may take
         > longer to start, and a short queue is possible during busy periods.
@@ -71,7 +91,9 @@ with gr.Blocks(title="PlotCraft") as demo:
         "Generate Python Code",
         variant="primary",
     )
-    status = gr.Markdown("Ready — choose an example or enter your own request.")
+    status = gr.Markdown(
+        "Ready - choose an example or enter your own request."
+    )
 
     generated_code = gr.Code(
         label="Generated Python code",
@@ -79,10 +101,29 @@ with gr.Blocks(title="PlotCraft") as demo:
         lines=22,
     )
 
+    render_button = gr.Button("Render Preview", variant="secondary")
+    gr.HTML(
+        """
+        <iframe
+            title="PlotCraft browser renderer"
+            src="/gradio_api/file=web/renderer.html"
+            sandbox="allow-scripts"
+            referrerpolicy="no-referrer"
+            loading="lazy"
+            style="width:100%;min-height:560px;border:0;border-radius:10px;"
+        ></iframe>
+        """,
+        elem_id="plotcraft-renderer",
+        container=True,
+        padding=True,
+    )
+
     gr.Markdown(
         """
-        **Safety notice:** PlotCraft displays generated code but does not execute
-        it on the server. Review generated Python before running it.
+        **Safety notice:** Preview code runs only inside an isolated browser
+        worker. It is validated, has no access to the PlotCraft server, and is
+        stopped after 10 seconds. Review generated Python before using it
+        elsewhere.
         """
     )
 
@@ -98,6 +139,14 @@ with gr.Blocks(title="PlotCraft") as demo:
         outputs=[generated_code, status],
         api_name=False,
     )
+    render_button.click(
+        fn=None,
+        inputs=generated_code,
+        outputs=None,
+        js=RENDER_PREVIEW_JS,
+        queue=False,
+        api_visibility="private",
+    )
 
 demo.queue(default_concurrency_limit=1, max_size=10)
 
@@ -105,4 +154,7 @@ demo.queue(default_concurrency_limit=1, max_size=10)
 if __name__ == "__main__":
     # Client-side rendering avoids the extra Node proxy used automatically on
     # Spaces and keeps the ZeroGPU application process simple and reliable.
-    demo.launch(ssr_mode=False)
+    demo.launch(
+        ssr_mode=False,
+        allowed_paths=[str(Path(__file__).parent / "web")],
+    )

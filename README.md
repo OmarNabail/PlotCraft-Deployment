@@ -9,48 +9,81 @@ python_version: 3.12
 app_file: app.py
 models:
   - saeedbenadeeb/NLG_Project
-short_description: Generate Matplotlib and TikZ code from natural language.
+short_description: Generate Python visualization code from natural language.
 ---
 
 # PlotCraft
 
 [![CI](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/ci.yml/badge.svg)](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/ci.yml)
 
-PlotCraft is a fine-tuned Qwen2.5-3B assistant that generates Matplotlib and
-TikZ visualization code from natural-language requests.
+PlotCraft is a fine-tuned Qwen2.5-3B assistant that converts natural-language
+requests into executable Python visualization code. This repository contains
+the Gradio application, FastAPI service, Docker configuration, automated tests,
+and GitHub Actions deployment pipeline.
 
 **[Try the live ZeroGPU demo](https://huggingface.co/spaces/omargam220/PlotCraft)**
 
-The application provides a Gradio interface, a FastAPI service, Docker
-packaging, automated tests, and GitHub Actions CI/CD. Generated code is shown
-to the user but is not executed on the server.
+Generated code is displayed for review and is not executed on the server.
 
-## Local development
+## Use the live application
 
-The default `mock` mode does not download the model:
+1. Open the live demo.
+2. Describe the Python visualization you want.
+3. Select **Submit**.
+4. Review and copy the generated Python code.
+
+Example request:
+
+```text
+Create a Matplotlib bar chart with categories A, B, C and values 2, 5, 3.
+```
+
+## Run locally
+
+Create and activate a virtual environment in Git Bash:
 
 ```bash
 python -m venv .venv
 source .venv/Scripts/activate
+```
+
+Install the dependencies and start the application:
+
+```bash
 pip install -r requirements.txt
-python -m pytest
 python app.py
 ```
 
-The Hugging Face ZeroGPU Space must set the variable `MODEL_MODE` to `real`.
+Local execution uses the lightweight mock mode by default, so it does not
+download the production model.
 
-## API
+Run the tests with:
 
-Run the containerized API with `docker compose up --build`, then open
-`http://localhost:8000/docs`. Check its health at
-`http://localhost:8000/health`.
+```bash
+python -m pytest
+```
 
-## Model
+## Run the API with Docker
 
-The deployed full model is
-[`saeedbenadeeb/NLG_Project/grpo-qwen2.5-3b`](https://huggingface.co/saeedbenadeeb/NLG_Project/tree/main/grpo-qwen2.5-3b).
+Build and start the container:
 
-## Contributors
+```bash
+docker compose up --build
+```
 
-- Omar Nabail — deployment, API, containerization, testing, and CI/CD
-- Saeed Adeeb — model training and dataset development
+Open the interactive API documentation at:
+
+```text
+http://localhost:8000/docs
+```
+
+Available endpoints:
+
+- `GET /health` checks whether the service is running.
+- `POST /generate` accepts a prompt and returns generated Python code.
+
+Stop the container with:
+
+```bash
+docker compose down
+```

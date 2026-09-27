@@ -29,8 +29,7 @@ demo = gr.Interface(
     ),
     title="PlotCraft",
     description=(
-        "Generate Matplotlib and TikZ visualization code "
-        "from natural-language instructions."
+        "Generate Python visualization code from natural-language instructions."
     ),
     examples=[
         ["Create a bar chart comparing three models"],

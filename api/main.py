@@ -8,7 +8,7 @@ from src.plotcraft.service import generate_plot_code
 
 app = FastAPI(
     title="PlotCraft API",
-    description="Generate Matplotlib or TikZ code from natural language.",
+    description="Generate Python visualization code from natural language.",
     version="0.1.0",
 )
 

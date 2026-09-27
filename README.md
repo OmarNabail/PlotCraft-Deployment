@@ -17,6 +17,8 @@ short_description: Generate Matplotlib and TikZ code from natural language.
 PlotCraft is a fine-tuned Qwen2.5-3B assistant that generates Matplotlib and
 TikZ visualization code from natural-language requests.
 
+**[Try the live ZeroGPU demo](https://huggingface.co/spaces/omargam220/PlotCraft)**
+
 The application provides a Gradio interface, a FastAPI service, Docker
 packaging, automated tests, and GitHub Actions CI/CD. Generated code is shown
 to the user but is not executed on the server.

@@ -1,3 +1,5 @@
+import logging
+
 import gradio as gr
 
 from src.plotcraft.service import generate_plot_code
@@ -10,6 +12,7 @@ def handle_generation(prompt: str) -> str:
     except ValueError as error:
         return str(error)
     except Exception:
+        logging.exception("Plot generation failed")
         return "Plot generation failed. Please try again."
 
 

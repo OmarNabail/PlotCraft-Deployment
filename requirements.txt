@@ -1,4 +1,5 @@
 annotated-doc==0.0.5
+accelerate>=1.0,<2
 annotated-types==0.8.0
 anyio==4.15.1
 brotli==1.2.0
@@ -35,6 +36,8 @@ pydantic_core==2.46.5
 pydub==0.25.1
 Pygments==2.21.0
 pytest==9.1.1
+torch>=2.8,<3
+transformers==5.2.0
 python-dateutil==2.9.0.post0
 python-multipart==0.0.32
 pytz==2026.4

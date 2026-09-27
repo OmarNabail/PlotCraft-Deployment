@@ -1,14 +1,11 @@
 ---
 title: PlotCraft
-emoji: 📊
-colorFrom: blue
-colorTo: purple
 sdk: gradio
 sdk_version: 6.28.0
 python_version: 3.12
 app_file: app.py
 models:
-  - saeedbenadeeb/NLG_Project
+  - PlotCraft
 short_description: Generate Python visualization code from natural language.
 ---
 

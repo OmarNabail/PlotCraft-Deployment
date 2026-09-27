@@ -1,7 +1,8 @@
-"""Load the trained PlotCraft model and run inference."""
+"""Load the trained PlotCraft model and run ZeroGPU inference."""
 
-from functools import lru_cache
-from typing import Any
+import spaces
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from src.plotcraft.config import (
     MAX_NEW_TOKENS,
@@ -11,46 +12,24 @@ from src.plotcraft.config import (
 )
 
 
-@lru_cache(maxsize=1)
-def load_model() -> tuple[Any, Any]:
-    """Download and load the tokenizer and full GRPO model once."""
-    try:
-        import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-    except ImportError as error:
-        raise RuntimeError(
-            "Real model mode requires torch, transformers, and accelerate."
-        ) from error
-
-    if not torch.cuda.is_available():
-        raise RuntimeError(
-            "Real model mode requires a CUDA GPU. Use MODEL_MODE=mock locally."
-        )
-
-    compute_dtype = (
-        torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    )
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        MODEL_ID,
-        subfolder=MODEL_SUBFOLDER,
-    )
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID,
-        subfolder=MODEL_SUBFOLDER,
-        dtype=compute_dtype,
-        device_map="auto",
-        low_cpu_mem_usage=True,
-    )
-    model.eval()
-    return tokenizer, model
+# ZeroGPU emulates CUDA during application startup. Loading onto CUDA here lets
+# the platform prepare the model once instead of transferring it per request.
+tokenizer = AutoTokenizer.from_pretrained(
+    MODEL_ID,
+    subfolder=MODEL_SUBFOLDER,
+)
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_ID,
+    subfolder=MODEL_SUBFOLDER,
+    dtype=torch.bfloat16,
+    low_cpu_mem_usage=True,
+).to("cuda")
+model.eval()
 
 
+@spaces.GPU(duration=120)
 def generate_with_model(prompt: str) -> str:
     """Generate PlotCraft code with the full GRPO Qwen model."""
-    import torch
-
-    tokenizer, model = load_model()
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
@@ -60,7 +39,7 @@ def generate_with_model(prompt: str) -> str:
         tokenize=False,
         add_generation_prompt=True,
     )
-    inputs = tokenizer(formatted_prompt, return_tensors="pt").to(model.device)
+    inputs = tokenizer(formatted_prompt, return_tensors="pt").to("cuda")
 
     with torch.inference_mode():
         output_ids = model.generate(

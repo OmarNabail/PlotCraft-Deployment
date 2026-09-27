@@ -2,6 +2,12 @@
 
 from src.plotcraft.config import MAX_PROMPT_CHARACTERS, MODEL_MODE
 
+if MODEL_MODE == "real":
+    # Importing at startup is required so ZeroGPU can prepare the model on CUDA.
+    from src.plotcraft.model import generate_with_model
+else:
+    generate_with_model = None
+
 
 PLACEHOLDER_CODE = """import matplotlib.pyplot as plt
 
@@ -46,8 +52,8 @@ def generate_plot_code(prompt: str) -> str:
     if MODEL_MODE != "real":
         raise RuntimeError("MODEL_MODE must be either 'mock' or 'real'.")
 
-    from src.plotcraft.model import generate_with_model
-
+    if generate_with_model is None:
+        raise RuntimeError("The real model is not initialized.")
     generated_code = _remove_markdown_fences(
         generate_with_model(cleaned_prompt)
     )

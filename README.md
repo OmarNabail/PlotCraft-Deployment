@@ -14,6 +14,8 @@ short_description: Generate Matplotlib and TikZ code from natural language.
 
 # PlotCraft
 
+[![CI](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/ci.yml/badge.svg)](https://github.com/OmarNabail/PlotCraft-Deployment/actions/workflows/ci.yml)
+
 PlotCraft is a fine-tuned Qwen2.5-3B assistant that generates Matplotlib and
 TikZ visualization code from natural-language requests.
 

@@ -40,4 +40,6 @@ demo = gr.Interface(
 
 
 if __name__ == "__main__":
-    demo.launch()
+    # Client-side rendering avoids the extra Node proxy used automatically on
+    # Spaces and keeps the ZeroGPU application process simple and reliable.
+    demo.launch(ssr_mode=False)

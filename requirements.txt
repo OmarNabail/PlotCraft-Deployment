@@ -19,6 +19,7 @@ httpcore==1.0.9
 httpx==0.28.1
 huggingface_hub==1.33.0
 idna==3.20
+iniconfig==2.3.0
 Jinja2==3.1.6
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
@@ -28,10 +29,12 @@ orjson==3.12.0
 packaging==26.3
 pandas==2.3.3
 pillow==12.3.0
+pluggy==1.6.0
 pydantic==2.13.5
 pydantic_core==2.46.5
 pydub==0.25.1
 Pygments==2.21.0
+pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-multipart==0.0.32
 pytz==2026.4
